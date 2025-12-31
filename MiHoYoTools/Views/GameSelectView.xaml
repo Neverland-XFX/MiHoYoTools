@@ -1,0 +1,43 @@
+<Page
+    x:Class="MiHoYoTools.Views.GameSelectView"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+    xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+    mc:Ignorable="d">
+
+    <Grid Padding="24">
+        <StackPanel Spacing="12">
+            <TextBlock Text="选择游戏" FontSize="24" FontWeight="Bold" />
+            <TextBlock x:Name="CurrentGameText" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+
+            <Grid Margin="0 8 0 0">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="*" />
+                </Grid.ColumnDefinitions>
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto" />
+                </Grid.RowDefinitions>
+
+                <Button Grid.Column="0" Tag="StarRail" Click="GameButton_Click" HorizontalAlignment="Stretch" Margin="0 0 8 0">
+                    <StackPanel Spacing="8" Padding="16">
+                        <FontIcon FontFamily="Segoe Fluent Icons" Glyph="&#xE7FC;" FontSize="32" />
+                        <TextBlock Text="崩坏：星穹铁道" FontSize="18" FontWeight="SemiBold" />
+                        <TextBlock Text="画质/帧率、账号切换、跃迁记录" TextWrapping="Wrap"
+                                   Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                    </StackPanel>
+                </Button>
+
+                <Button Grid.Column="1" Tag="ZenlessZoneZero" Click="GameButton_Click" HorizontalAlignment="Stretch" Margin="8 0 0 0">
+                    <StackPanel Spacing="8" Padding="16">
+                        <FontIcon FontFamily="Segoe Fluent Icons" Glyph="&#xE7F4;" FontSize="32" />
+                        <TextBlock Text="绝区零" FontSize="18" FontWeight="SemiBold" />
+                        <TextBlock Text="账号切换、调频记录、多开" TextWrapping="Wrap"
+                                   Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                    </StackPanel>
+                </Button>
+            </Grid>
+        </StackPanel>
+    </Grid>
+</Page>
