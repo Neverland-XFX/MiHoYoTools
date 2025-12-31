@@ -23,11 +23,11 @@
             <StackPanel Orientation="Horizontal" Margin="0 24 0 0">
 
                 <StackPanel Orientation="Vertical">
-                    <Image Source="ms-appx:///Imgs/don_wechat.png" Height="256" Margin="0 0 8 0"/>
+                    <Image Source="ms-appx:///Imgs/Don_Wechat.png" Height="256" Margin="0 0 8 0"/>
                 </StackPanel>
                 
                 <StackPanel Orientation="Vertical">
-                    <Image Source="ms-appx:///Imgs/don_alipay.png" Height="256" Margin="0 0 8 0"/>
+                    <Image Source="ms-appx:///Imgs/Don_Alipay.png" Height="256" Margin="0 0 8 0"/>
                 </StackPanel>
 
             </StackPanel>
