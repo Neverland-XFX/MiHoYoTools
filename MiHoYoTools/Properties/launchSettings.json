@@ -1,0 +1,10 @@
+{
+  "profiles": {
+    "MiHoYoTools (Package)": {
+      "commandName": "MsixPackage"
+    },
+    "MiHoYoTools (Unpackaged)": {
+      "commandName": "Project"
+    }
+  }
+}
