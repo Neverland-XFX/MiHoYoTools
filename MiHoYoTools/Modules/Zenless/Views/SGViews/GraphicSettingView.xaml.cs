@@ -40,9 +40,20 @@ namespace MiHoYoTools.Modules.Zenless.Views.SGViews
 
         private async void LoadData()
         {
-            await LoadGraphicsData(false);
-            DDB_Main.Visibility = Visibility.Visible;
-            DDB_Load.Visibility = Visibility.Collapsed;
+            try
+            {
+                await LoadGraphicsData(false);
+                DDB_Main.Visibility = Visibility.Visible;
+            }
+            catch (Exception ex)
+            {
+                Logging.Write($"LoadGraphicsData failed: {ex.Message}", 3, "GraphicSettingView");
+                DDB_Main.Visibility = Visibility.Collapsed;
+            }
+            finally
+            {
+                DDB_Load.Visibility = Visibility.Collapsed;
+            }
         }
 
         private async Task LoadGraphicsData(bool isForce)

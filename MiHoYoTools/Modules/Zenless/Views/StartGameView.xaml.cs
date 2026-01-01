@@ -39,6 +39,7 @@ namespace MiHoYoTools.Modules.Zenless.Views
 {
     public sealed partial class StartGameView : Page
     {
+        private const bool ZenlessGraphicsFeatureEnabled = false;
         public static string GameRegion = null;
         private DispatcherQueue dispatcherQueue;
         private DispatcherQueueTimer dispatcherTimer_Game;
@@ -440,24 +441,37 @@ namespace MiHoYoTools.Modules.Zenless.Views
         {
             Frame_GraphicSettingView_Loading.Visibility = Visibility.Visible;
             Frame_GraphicSettingView.Content = null;
+            Frame_GraphicSettingView_Disable.Visibility = Visibility.Collapsed;
+
+            if (!ZenlessGraphicsFeatureEnabled)
+            {
+                ShowGraphicDisable("画质调节暂不可用", "等待后续版本适配");
+                return;
+            }
+
+            if (string.IsNullOrWhiteSpace(GameRegion))
+            {
+                ShowGraphicDisable("无法识别区服", "请重新选择游戏本体");
+                return;
+            }
 
             if (IsZenlessToolsHelperRequireUpdate)
             {
-                Frame_GraphicSettingView_Disable.Visibility = Visibility.Visible;
-                Frame_GraphicSettingView_Disable_Title.Text = "ZenlessToolsHelper需要更新";
-                Frame_GraphicSettingView_Disable_Subtitle.Text = "请更新后再使用";
+                ShowGraphicDisable("ZenlessToolsHelper需要更新", "请更新后再使用");
             }
             else
             {
                 try
                 {
                     string GSValue = await ProcessRun.ZenlessToolsHelperAsync($"/GetReg {GameRegion}");
-                    if (!GSValue.Contains("FPS"))
+                    if (!string.IsNullOrWhiteSpace(GSValue) &&
+                        (GSValue.Contains("指定的参数错误") || GSValue.Contains("使用/?")))
                     {
-                        GraphicSelect.IsEnabled = false;
-                        GraphicSelect.IsSelected = false;
-                        Frame_GraphicSettingView_Loading.Visibility = Visibility.Collapsed;
-                        Frame_GraphicSettingView_Disable.Visibility = Visibility.Visible;
+                        ShowGraphicDisable("画质调节暂不可用", "当前ZenlessToolsHelper不支持该功能");
+                    }
+                    else if (string.IsNullOrWhiteSpace(GSValue) || !GSValue.Contains("FPS"))
+                    {
+                        ShowGraphicDisable("画质调节不可用", "未获取到画质配置");
                     }
                     else
                     {
@@ -474,26 +488,65 @@ namespace MiHoYoTools.Modules.Zenless.Views
                 {
                     // 处理异常，记录日志或者显示错误信息
                     Logging.Write($"Exception in CheckProcess_Graphics: {ex.Message}", 3, "CheckProcess_Graphics");
+                    ShowGraphicDisable("画质调节不可用", "读取配置失败");
                 }
             }
         }
 
         private async void CheckProcess_Account()
         {
+            Frame_AccountView_Loading.Visibility = Visibility.Visible;
+            Frame_AccountView_Disable.Visibility = Visibility.Collapsed;
+            Frame_AccountView.Content = null;
+
+            if (string.IsNullOrWhiteSpace(GameRegion))
+            {
+                ShowAccountDisable("无法识别区服", "请重新选择游戏本体");
+                return;
+            }
+
             if (IsZenlessToolsHelperRequireUpdate)
             {
-                Frame_AccountView_Disable.Visibility = Visibility.Visible;
-                Frame_AccountView_Disable_Title.Text = "ZenlessToolsHelper需要更新";
-                Frame_AccountView_Disable_Subtitle.Text = "请更新后再使用";
+                ShowAccountDisable("ZenlessToolsHelper需要更新", "请更新后再使用");
             }
             else
             {
-                AccountSelect.IsEnabled = true;
-                AccountSelect.IsSelected = true;
-                Frame_AccountView_Loading.Visibility = Visibility.Collapsed;
-                Frame_AccountView.Visibility = Visibility.Visible;
-                Frame_AccountView.Navigate(typeof(AccountView));
+                try
+                {
+                    AccountSelect.IsEnabled = true;
+                    AccountSelect.IsSelected = true;
+                    Frame_AccountView_Loading.Visibility = Visibility.Collapsed;
+                    Frame_AccountView.Visibility = Visibility.Visible;
+                    Frame_AccountView.Navigate(typeof(AccountView));
+                }
+                catch (Exception ex)
+                {
+                    Logging.Write($"Exception in CheckProcess_Account: {ex.Message}", 3, "CheckProcess_Account");
+                    ShowAccountDisable("账号切换不可用", "加载失败");
+                }
             }
+        }
+
+        private void ShowGraphicDisable(string title, string subtitle)
+        {
+            GraphicSelect.IsEnabled = false;
+            GraphicSelect.IsSelected = false;
+            Frame_GraphicSettingView_Loading.Visibility = Visibility.Collapsed;
+            Frame_GraphicSettingView_Disable.Visibility = Visibility.Visible;
+            Frame_GraphicSettingView_Disable_Title.Text = title;
+            Frame_GraphicSettingView_Disable_Subtitle.Text = subtitle;
+            Frame_GraphicSettingView.Visibility = Visibility.Collapsed;
+        }
+
+        private void ShowAccountDisable(string title, string subtitle)
+        {
+            AccountSelect.IsEnabled = false;
+            AccountSelect.IsSelected = false;
+            Frame_AccountView_Loading.Visibility = Visibility.Collapsed;
+            Frame_AccountView_Disable.Visibility = Visibility.Visible;
+            Frame_AccountView_Disable_Title.Text = title;
+            Frame_AccountView_Disable_Subtitle.Text = subtitle;
+            Frame_AccountView.Visibility = Visibility.Collapsed;
         }
 
         private async Task GetPromptAsync()

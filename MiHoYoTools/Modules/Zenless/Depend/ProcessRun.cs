@@ -21,6 +21,7 @@
 using System;
 using System.Diagnostics;
 using System.IO;
+using System.IO.Compression;
 using System.Security.Principal;
 using System.Threading.Tasks;
 using Microsoft.UI.Xaml.Controls;
@@ -30,18 +31,53 @@ namespace MiHoYoTools.Modules.Zenless.Depend
 {
     class ProcessRun
     {
+        private static string ResolveHelperExePath()
+        {
+            string docsPath = Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments);
+            string dependsRoot = Path.Combine(docsPath, "JSG-LLC", "ZenlessTools", "Depends");
+            string helperDir = Path.Combine(dependsRoot, "ZenlessToolsHelper");
+            string helperExePath = Path.Combine(helperDir, "ZenlessToolsHelper.exe");
+
+            if (File.Exists(helperExePath))
+            {
+                return helperExePath;
+            }
+
+            string zipPath = Path.Combine(dependsRoot, "ZenlessToolsHelper.zip");
+            if (File.Exists(zipPath))
+            {
+                try
+                {
+                    Directory.CreateDirectory(helperDir);
+                    ZipFile.ExtractToDirectory(zipPath, helperDir, true);
+                }
+                catch (Exception ex)
+                {
+                    Logging.Write($"Failed to extract helper: {ex.Message}", 3, "ZenlessToolsHelper");
+                }
+            }
+
+            return helperExePath;
+        }
+
         public static async Task<string> ZenlessToolsHelperAsync(string args)
         {
             return await Task.Run(() =>
             {
                 try
                 {
+                    string helperPath = ResolveHelperExePath();
+                    if (!File.Exists(helperPath))
+                    {
+                        throw new FileNotFoundException("ZenlessToolsHelper.exe not found.", helperPath);
+                    }
+
                     using (Process process = new Process())
                     {
                         process.StartInfo.UseShellExecute = false;
                         process.StartInfo.RedirectStandardOutput = true;
                         process.StartInfo.RedirectStandardError = true; // 捕获标准错误输出
-                        process.StartInfo.FileName = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments), @"JSG-LLC\ZenlessTools\Depends\ZenlessToolsHelper\ZenlessToolsHelper.exe");
+                        process.StartInfo.FileName = helperPath;
                         process.StartInfo.Arguments = args;
 
                         Logging.Write($"Starting process: {process.StartInfo.FileName} with arguments: {args}", 0, "ZenlessToolsHelper");

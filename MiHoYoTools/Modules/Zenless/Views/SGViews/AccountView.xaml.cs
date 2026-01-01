@@ -48,23 +48,37 @@ namespace MiHoYoTools.Modules.Zenless.Views.SGViews
             currentAccount.IsEnabled = false;
             updateAccount.Visibility = Visibility.Collapsed;
 
-            var backupDataTask = ProcessRun.ZenlessToolsHelperAsync($"/GetSaveUser {StartGameView.GameRegion}");
-
-            await LoadData(await backupDataTask, await GetCurrentLogin());
-
-            Account_Load.Visibility = Visibility.Collapsed;
-            refreshAccount.Visibility = Visibility.Visible;
-            refreshAccount_Loading.Visibility = Visibility.Collapsed;
+            try
+            {
+                var backupDataTask = ProcessRun.ZenlessToolsHelperAsync($"/GetSaveUser {StartGameView.GameRegion}");
+                await LoadData(await backupDataTask, await GetCurrentLogin());
+            }
+            catch (Exception ex)
+            {
+                Logging.Write($"InitData failed: {ex.Message}", 3, "AccountView");
+                NotificationManager.RaiseNotification("账号列表加载失败", "请确认ZenlessToolsHelper可用", InfoBarSeverity.Error, false, 3);
+            }
+            finally
+            {
+                Account_Load.Visibility = Visibility.Collapsed;
+                refreshAccount.Visibility = Visibility.Visible;
+                refreshAccount_Loading.Visibility = Visibility.Collapsed;
+            }
         }
 
         private async Task LoadData(string jsonData, string CurrentLoginUID)
         {
             var accountexist = false;
             AccountListView.SelectionChanged -= AccountListView_SelectionChanged;
-            List<Account> accounts = JsonConvert.DeserializeObject<List<Account>>(jsonData);
-
-            if (accounts == null)
+            List<Account> accounts;
+            try
             {
+                accounts = JsonConvert.DeserializeObject<List<Account>>(jsonData) ?? new List<Account>();
+            }
+            catch (Exception ex)
+            {
+                Logging.Write($"Account list parse failed: {ex.Message}", 3, "AccountView");
+                NotificationManager.RaiseNotification("账号列表解析失败", "返回内容无效", InfoBarSeverity.Error, false, 3);
                 accounts = new List<Account>();
             }
 

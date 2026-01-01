@@ -53,15 +53,27 @@ namespace MiHoYoTools.Modules.Zenless.Views.NotifyViews
         public async void LoadBanner()
         {
             Logging.Write("Start loading banners", 0);
-            string apiUrl = "https://hyp-api.mihoyo.com/hyp/hyp-connect/api/getGameContent?launcher_id=jGHBHlcOq1&game_id=x6znKlJ0xK&language=zh-cn";
-            string responseBody = await FetchOtherData(apiUrl);
-            using (JsonDocument doc = JsonDocument.Parse(responseBody))
+            try
             {
-                JsonElement root = doc.RootElement;
-                JsonElement banners = root.GetProperty("data").GetProperty("content").GetProperty("banners");
-                await PopulatePicturesAsync(banners);
+                string apiUrl = "https://hyp-api.mihoyo.com/hyp/hyp-connect/api/getGameContent?launcher_id=jGHBHlcOq1&game_id=x6znKlJ0xK&language=zh-cn";
+                string responseBody = await FetchOtherData(apiUrl);
+                using (JsonDocument doc = JsonDocument.Parse(responseBody))
+                {
+                    JsonElement root = doc.RootElement;
+                    JsonElement banners = root.GetProperty("data").GetProperty("content").GetProperty("banners");
+                    await PopulatePicturesAsync(banners);
+                }
+                Logging.Write("Finished loading banners", 0);
             }
-            Logging.Write("Finished loading banners", 0);
+            catch (Exception ex)
+            {
+                Logging.Write($"Failed to load banners: {ex.Message}", 2);
+                if (Pictures.Count == 0)
+                {
+                    Pictures.Add(placeholderImage);
+                    FlipViewPipsPager.NumberOfPages = 1;
+                }
+            }
         }
 
         public static async Task<string> FetchOtherData(string url)

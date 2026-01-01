@@ -3,6 +3,7 @@ using Microsoft.Data.Sqlite;
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using ZenlessGachaModel = MiHoYoTools.Modules.Zenless.Depend.GachaModel;
 
 namespace MiHoYoTools.Data
 {
@@ -141,9 +142,143 @@ VALUES
             }
         }
 
+        public static List<string> GetUids(GameType game)
+        {
+            var uids = new List<string>();
+            lock (SyncLock)
+            {
+                var db = new AppDb(AppPaths.DatabasePath);
+                using var connection = db.Open();
+                using var command = connection.CreateCommand();
+                command.CommandText = "SELECT DISTINCT uid FROM gacha_records WHERE game = $game ORDER BY uid;";
+                command.Parameters.AddWithValue("$game", game.ToString());
+                using var reader = command.ExecuteReader();
+                while (reader.Read())
+                {
+                    if (!reader.IsDBNull(0))
+                    {
+                        uids.Add(reader.GetString(0));
+                    }
+                }
+            }
+            return uids;
+        }
+
+        public static ZenlessGachaModel.GachaData GetZenlessGachaData(string uid)
+        {
+            if (string.IsNullOrWhiteSpace(uid))
+            {
+                return null;
+            }
+
+            var data = new ZenlessGachaModel.GachaData
+            {
+                info = new ZenlessGachaModel.GachaInfo { uid = uid },
+                list = new List<ZenlessGachaModel.GachaPool>()
+            };
+
+            lock (SyncLock)
+            {
+                var db = new AppDb(AppPaths.DatabasePath);
+                using var connection = db.Open();
+                using var command = connection.CreateCommand();
+                command.CommandText = @"
+SELECT pool_id, pool_type, item_id, count, time, name, item_type, rank_type, lang, record_id
+FROM gacha_records
+WHERE game = $game AND uid = $uid;";
+                command.Parameters.AddWithValue("$game", GameType.ZenlessZoneZero.ToString());
+                command.Parameters.AddWithValue("$uid", uid);
+
+                using var reader = command.ExecuteReader();
+                var pools = new Dictionary<int, ZenlessGachaModel.GachaPool>();
+                while (reader.Read())
+                {
+                    var poolId = reader.GetInt32(0);
+                    var poolType = reader.IsDBNull(1) ? string.Empty : reader.GetString(1);
+
+                    if (!pools.TryGetValue(poolId, out var pool))
+                    {
+                        pool = new ZenlessGachaModel.GachaPool
+                        {
+                            cardPoolId = poolId,
+                            cardPoolType = poolType,
+                            records = new List<ZenlessGachaModel.GachaRecord>()
+                        };
+                        pools[poolId] = pool;
+                    }
+                    else if (string.IsNullOrWhiteSpace(pool.cardPoolType) && !string.IsNullOrWhiteSpace(poolType))
+                    {
+                        pool.cardPoolType = poolType;
+                    }
+
+                    var record = new ZenlessGachaModel.GachaRecord
+                    {
+                        gachaType = poolId.ToString(),
+                        itemId = reader.IsDBNull(2) ? string.Empty : reader.GetString(2),
+                        count = reader.IsDBNull(3) ? "0" : reader.GetInt32(3).ToString(),
+                        time = reader.IsDBNull(4) ? string.Empty : reader.GetString(4),
+                        name = reader.IsDBNull(5) ? string.Empty : reader.GetString(5),
+                        itemType = reader.IsDBNull(6) ? string.Empty : reader.GetString(6),
+                        rankType = reader.IsDBNull(7) ? string.Empty : reader.GetString(7),
+                        lang = reader.IsDBNull(8) ? string.Empty : reader.GetString(8),
+                        id = reader.IsDBNull(9) ? string.Empty : reader.GetString(9)
+                    };
+                    pool.records.Add(record);
+                }
+
+                foreach (var pool in pools.Values)
+                {
+                    if (string.IsNullOrWhiteSpace(pool.cardPoolType))
+                    {
+                        pool.cardPoolType = GetZenlessPoolType(pool.cardPoolId);
+                    }
+
+                    pool.records = pool.records
+                        .OrderByDescending(r => ParseLong(r.id))
+                        .ToList();
+                    data.list.Add(pool);
+                }
+            }
+
+            data.list = data.list
+                .OrderBy(pool => GetZenlessPoolOrder(pool.cardPoolId))
+                .ToList();
+
+            return data;
+        }
+
         private static int ParseInt(string value)
         {
             return int.TryParse(value, out var parsed) ? parsed : 0;
+        }
+
+        private static long ParseLong(string value)
+        {
+            return long.TryParse(value, out var parsed) ? parsed : 0;
+        }
+
+        private static int GetZenlessPoolOrder(int cardPoolId)
+        {
+            return cardPoolId switch
+            {
+                2 => 1,
+                3 => 2,
+                1 => 95,
+                5 => 96,
+                _ => 100
+            };
+        }
+
+        private static string GetZenlessPoolType(int cardPoolId)
+        {
+            return cardPoolId switch
+            {
+                2 => "独家频段",
+                3 => "音擎频段",
+                1 => "常驻频段",
+                5 => "邦布频段",
+                _ => "未知频段"
+            };
         }
 
         private sealed class GachaRecordRow

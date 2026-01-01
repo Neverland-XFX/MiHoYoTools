@@ -61,19 +61,24 @@ namespace MiHoYoTools.Modules.Zenless.Views
         private async void MainView_Loaded(object sender, RoutedEventArgs e)
         {
             await LoadImageLinksAsync();
-            await CompareAndUpdateImageLinks();
-            LoadPostAsync();
-
             try
             {
-                await getNotify.Get();
-                Notify_Grid.Visibility = Visibility.Visible;
+                await CompareAndUpdateImageLinks();
             }
-            catch
+            catch (Exception ex)
             {
+                Logging.Write($"Error loading homepage data: {ex.Message}", 2);
                 loadRing.Visibility = Visibility.Collapsed;
                 loadErr.Visibility = Visibility.Visible;
+
+                if (!string.IsNullOrEmpty(backgroundUrl) || !string.IsNullOrEmpty(iconUrl))
+                {
+                    await LoadAdvertisementDataAsync();
+                    loadErr.Visibility = Visibility.Collapsed;
+                }
             }
+
+            await LoadPostAsync();
         }
 
         private async Task LoadGameBackgroundAsync()
@@ -100,23 +105,32 @@ namespace MiHoYoTools.Modules.Zenless.Views
             }
         }
 
-        private async void LoadPostAsync()
+        private async Task LoadPostAsync()
         {
-            await getNotify.Get();
-            NotifyLoad.Visibility = Visibility.Collapsed;
-            NotifyNav.Visibility = Visibility.Visible;
-
-            foreach (var menuItem in NotifyNav.Items)
+            try
             {
-                if (menuItem is SelectorBarItem item && item.IsEnabled)
+                await getNotify.Get();
+                Notify_Grid.Visibility = Visibility.Visible;
+                NotifyLoad.Visibility = Visibility.Collapsed;
+                NotifyNav.Visibility = Visibility.Visible;
+
+                foreach (var menuItem in NotifyNav.Items)
                 {
-                    NotifyNav.SelectedItem = item;
-                    break;
+                    if (menuItem is SelectorBarItem item && item.IsEnabled)
+                    {
+                        NotifyNav.SelectedItem = item;
+                        break;
+                    }
                 }
+            }
+            catch (Exception ex)
+            {
+                Logging.Write($"Error loading notifications: {ex.Message}", 2);
+                NotifyLoad.Visibility = Visibility.Collapsed;
             }
         }
 
-        private async void LoadAdvertisementDataAsync()
+        private async Task LoadAdvertisementDataAsync()
         {
             Logging.Write("LoadAdvertisementData...", 0);
 
@@ -331,7 +345,7 @@ namespace MiHoYoTools.Modules.Zenless.Views
                         imageLinks["background"] = backgroundUrl;
                         imageLinks["icon"] = iconUrl;
                         SaveImageLinks();
-                        LoadAdvertisementDataAsync();
+                        await LoadAdvertisementDataAsync();
                         break;
                     }
                 }

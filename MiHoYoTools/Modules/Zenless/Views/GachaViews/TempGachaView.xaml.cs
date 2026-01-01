@@ -20,7 +20,6 @@
 
 using System;
 using System.Collections.Generic;
-using System.IO;
 using System.Linq;
 using Microsoft.UI;
 using Microsoft.UI.Text;
@@ -28,10 +27,9 @@ using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Data;
 using Microsoft.UI.Xaml.Media;
-using Newtonsoft.Json;
 using MiHoYoTools.Modules.Zenless.Depend;
 using MiHoYoTools.Modules.Zenless.Views.ToolViews;
-using MiHoYoTools.Core;
+using MiHoYoTools.Data;
 
 namespace MiHoYoTools.Modules.Zenless.Views.GachaViews
 {
@@ -51,21 +49,19 @@ namespace MiHoYoTools.Modules.Zenless.Views.GachaViews
             int selectedCardPoolId = GachaView.selectedCardPoolId;
             Logging.Write($"Selected UID: {selectedUID}, Selected Card Pool ID: {selectedCardPoolId}", 0);
 
-            string recordsDirectory = AppPaths.ResolveGameFolder(GameType.ZenlessZoneZero, "GachaRecords");
-            string filePath = Path.Combine(recordsDirectory, $"{selectedUID}.json");
-            Logging.Write($"Records Directory: {recordsDirectory}, File Path: {filePath}", 0);
-
-            if (!File.Exists(filePath))
+            var gachaData = GachaRepository.GetZenlessGachaData(selectedUID);
+            if (gachaData?.list == null || gachaData.list.Count == 0)
             {
-                Logging.Write("File not found: " + filePath, 1);
-                Console.WriteLine("�Ҳ���UID�ĵ�Ƶ��¼�ļ�");
+                Logging.Write("No gacha records found for UID: " + selectedUID, 1);
+                Console.WriteLine("未找到UID的调频记录");
                 return;
             }
 
-            Logging.Write("Reading file content", 0);
-            string jsonContent = await File.ReadAllTextAsync(filePath);
-            Logging.Write("Deserializing JSON content", 0);
-            var gachaData = JsonConvert.DeserializeObject<GachaModel.GachaData>(jsonContent);
+            var cardPoolInfo = GachaView.cardPoolInfo ?? new GachaModel.CardPoolInfo { CardPools = new List<GachaModel.CardPool>() };
+            if (cardPoolInfo.CardPools == null)
+            {
+                cardPoolInfo.CardPools = new List<GachaModel.CardPool>();
+            }
             var records = gachaData.list.Where(pool => pool.cardPoolId == selectedCardPoolId).SelectMany(pool => pool.records).ToList();
             Logging.Write($"Total records found: {records.Count}", 0);
 
@@ -80,10 +76,10 @@ namespace MiHoYoTools.Modules.Zenless.Views.GachaViews
             Logging.Write("Grouped records by name", 0);
 
             // ��ʾ��¼����
-            DisplayGachaDetails(gachaData, rank4Records, rank5Records, selectedCardPoolId, GachaView.cardPoolInfo);
+            DisplayGachaDetails(gachaData, rank4Records, rank5Records, selectedCardPoolId, cardPoolInfo);
 
             // ��ʾ�鿨����
-            DisplayGachaInfo(records, selectedCardPoolId);
+            DisplayGachaInfo(records, selectedCardPoolId, cardPoolInfo);
 
             // ��ʾ��Ƶ��¼
             DisplayGachaRecords(records);
@@ -96,18 +92,18 @@ namespace MiHoYoTools.Modules.Zenless.Views.GachaViews
             GachaRecords_List.ItemsSource = records;
         }
 
-        private void DisplayGachaInfo(List<GachaModel.GachaRecord> records, int selectedCardPoolId)
+        private void DisplayGachaInfo(List<GachaModel.GachaRecord> records, int selectedCardPoolId, GachaModel.CardPoolInfo cardPoolInfo)
         {
             Logging.Write("Displaying gacha info", 0);
-            var selectedCardPool = GachaView.cardPoolInfo.CardPools.FirstOrDefault(cp => cp.CardPoolId == selectedCardPoolId);
+            var selectedCardPool = cardPoolInfo.CardPools?.FirstOrDefault(cp => cp.CardPoolId == selectedCardPoolId);
 
             var rank5Records = records.Where(r => r.rankType == "4")
                                        .Select(r => new
                                        {
                                            r.name,
                                            Count = CalculateCount(records, r.id, "4"),
-                                           Pity = CalculatePity(records, r.name, "4", selectedCardPoolId, GachaView.cardPoolInfo),
-                                           PityVisibility = (bool)selectedCardPool.isPityEnable ? Visibility.Collapsed : Visibility.Collapsed
+                                           Pity = CalculatePity(records, r.name, "4", selectedCardPoolId, cardPoolInfo),
+                                           PityVisibility = Visibility.Collapsed
                                        }).ToList();
 
             if (rank5Records.Count == 0) GachaInfo_List_Disable.Visibility = Visibility.Visible;
@@ -140,7 +136,7 @@ namespace MiHoYoTools.Modules.Zenless.Views.GachaViews
             }
             if (!foundTargetStar)
             {
-                return "δ�ҵ�";
+                return "未找到";
             }
 
             Logging.Write($"Count since last target star: {countSinceLastTargetStar}", 0);
@@ -151,18 +147,22 @@ namespace MiHoYoTools.Modules.Zenless.Views.GachaViews
         private string CalculatePity(List<GachaModel.GachaRecord> records, string name, string rankType, int selectedCardPoolId, GachaModel.CardPoolInfo cardPoolInfo)
         {
             Logging.Write("Calculating pity", 0);
-            var selectedCardPool = cardPoolInfo.CardPools.FirstOrDefault(cp => cp.CardPoolId == selectedCardPoolId);
-            var specialNames = new List<string> { "è��", "��11�š�", "�����", "������", "����˿", "����" };
+            var selectedCardPool = cardPoolInfo?.CardPools?.FirstOrDefault(cp => cp.CardPoolId == selectedCardPoolId);
+            if (selectedCardPool == null)
+            {
+                return "";
+            }
+            var specialNames = new List<string> { "猫又", "11号", "柯蕾妲", "格莉丝", "丽娜", "莱卡恩" };
 
             if (specialNames.Contains(name))
             {
-                if ((bool)!selectedCardPool.isPityEnable) return "";
-                Logging.Write("Pity result: ����", 0);
-                return "����";
+                if (selectedCardPool.isPityEnable == false) return "";
+                Logging.Write("Pity result: 歪了", 0);
+                return "歪了";
             }
             else
             {
-                Logging.Write("Pity result: û��", 0);
+                Logging.Write("Pity result: 未歪", 0);
                 return "";
             }
         }
@@ -190,6 +190,14 @@ namespace MiHoYoTools.Modules.Zenless.Views.GachaViews
         private void DisplayGachaDetails(GachaModel.GachaData gachaData, List<GachaModel.GachaRecord> rank4Records, List<GachaModel.GachaRecord> rank5Records, int selectedCardPoolId, GachaModel.CardPoolInfo cardPoolInfo)
         {
             Logging.Write("Displaying gacha details", 0);
+            if (cardPoolInfo == null)
+            {
+                cardPoolInfo = new GachaModel.CardPoolInfo { CardPools = new List<GachaModel.CardPool>() };
+            }
+            else if (cardPoolInfo.CardPools == null)
+            {
+                cardPoolInfo.CardPools = new List<GachaModel.CardPool>();
+            }
             Gacha_Panel.Children.Clear();
             var scrollView = new ScrollViewer
             {
@@ -246,52 +254,52 @@ namespace MiHoYoTools.Modules.Zenless.Views.GachaViews
             var fiveStarIntervals = CalculateIntervals(selectedRecords, "4");
 
             // ����ƽ��ֵ
-            string averageDraws4Star = fourStarIntervals.Count > 0 ? (fourStarIntervals.Average()).ToString("F2") : "��";
-            string averageDraws5Star = fiveStarIntervals.Count > 0 ? (fiveStarIntervals.Average()).ToString("F2") : "��";
+            string averageDraws4Star = fourStarIntervals.Count > 0 ? (fourStarIntervals.Average()).ToString("F2") : "无";
+            string averageDraws5Star = fiveStarIntervals.Count > 0 ? (fiveStarIntervals.Average()).ToString("F2") : "无";
 
             Gacha_UID.Text = gachaData.info.uid;
-            GachaRecords_Count.Text = "��" + selectedRecords.Count() + "��";
-            GachaInfo_SinceLast5Star.Text = $"����{countSinceLast5Star}��";
+            GachaRecords_Count.Text = $"共{selectedRecords.Count()}抽";
+            GachaInfo_SinceLast5Star.Text = $"距上次S级已{countSinceLast5Star}抽";
 
             var basicInfoPanel = CreateDetailBorder();
             var stackPanelBasicInfo = new StackPanel();
             stackPanelBasicInfo.Children.Add(new TextBlock { Text = $"UID: {gachaData.info.uid}", FontWeight = FontWeights.Bold });
-            stackPanelBasicInfo.Children.Add(new TextBlock { Text = $"�ܼƳ���: {selectedRecords.Count}" });
-            stackPanelBasicInfo.Children.Add(new TextBlock { Text = $"�鵽S������: {rank5Records.Count}" });
-            stackPanelBasicInfo.Children.Add(new TextBlock { Text = $"�鵽A������: {rank4Records.Count}" });
-            stackPanelBasicInfo.Children.Add(new TextBlock { Text = $"Ԥ��ʹ�÷���: {selectedRecords.Count * 160}" });
+            stackPanelBasicInfo.Children.Add(new TextBlock { Text = $"累计调频: {selectedRecords.Count}" });
+            stackPanelBasicInfo.Children.Add(new TextBlock { Text = $"抽到S级数: {rank5Records.Count}" });
+            stackPanelBasicInfo.Children.Add(new TextBlock { Text = $"抽到A级数: {rank4Records.Count}" });
+            stackPanelBasicInfo.Children.Add(new TextBlock { Text = $"预计消耗: {selectedRecords.Count * 160}" });
             basicInfoPanel.Child = stackPanelBasicInfo;
             contentPanel.Children.Add(basicInfoPanel);
 
             var detailInfoPanel = CreateDetailBorder();
             var stackPanelDetailInfo = new StackPanel();
-            stackPanelDetailInfo.Children.Add(new TextBlock { Text = "��ϸͳ��", FontWeight = FontWeights.Bold });
+            stackPanelDetailInfo.Children.Add(new TextBlock { Text = "详细统计", FontWeight = FontWeights.Bold });
 
-            stackPanelDetailInfo.Children.Add(new TextBlock { Text = $"S��ƽ������: {averageDraws5Star}��" });
-            stackPanelDetailInfo.Children.Add(new TextBlock { Text = $"A��ƽ������: {averageDraws4Star}��" });
+            stackPanelDetailInfo.Children.Add(new TextBlock { Text = $"S级平均抽数: {averageDraws5Star}抽" });
+            stackPanelDetailInfo.Children.Add(new TextBlock { Text = $"A级平均抽数: {averageDraws4Star}抽" });
 
-            string rate4Star = rank4Records.Count > 0 ? (rank4Records.Count / (double)selectedRecords.Count * 100).ToString("F2") + "%" : "��";
-            string rate5Star = rank5Records.Count > 0 ? (rank5Records.Count / (double)selectedRecords.Count * 100).ToString("F2") + "%" : "��";
+            string rate4Star = rank4Records.Count > 0 ? (rank4Records.Count / (double)selectedRecords.Count * 100).ToString("F2") + "%" : "无";
+            string rate5Star = rank5Records.Count > 0 ? (rank5Records.Count / (double)selectedRecords.Count * 100).ToString("F2") + "%" : "无";
 
-            stackPanelDetailInfo.Children.Add(new TextBlock { Text = $"S����ȡ��: {rate5Star}" });
-            stackPanelDetailInfo.Children.Add(new TextBlock { Text = $"A����ȡ��: {rate4Star}" });
+            stackPanelDetailInfo.Children.Add(new TextBlock { Text = $"S级获取率: {rate5Star}" });
+            stackPanelDetailInfo.Children.Add(new TextBlock { Text = $"A级获取率: {rate4Star}" });
 
             if (rank5Records.Any())
             {
-                stackPanelDetailInfo.Children.Add(new TextBlock { Text = $"���S��: {rank5Records.First().time}" });
+                stackPanelDetailInfo.Children.Add(new TextBlock { Text = $"最近S级: {rank5Records.First().time}" });
             }
             else
             {
-                stackPanelDetailInfo.Children.Add(new TextBlock { Text = "���S��: ��" });
+                stackPanelDetailInfo.Children.Add(new TextBlock { Text = "最近S级: 无" });
             }
 
             if (rank4Records.Any())
             {
-                stackPanelDetailInfo.Children.Add(new TextBlock { Text = $"���A��: {rank4Records.First().time}" });
+                stackPanelDetailInfo.Children.Add(new TextBlock { Text = $"最近A级: {rank4Records.First().time}" });
             }
             else
             {
-                stackPanelDetailInfo.Children.Add(new TextBlock { Text = "���A��: ��" });
+                stackPanelDetailInfo.Children.Add(new TextBlock { Text = "最近A级: 无" });
             }
 
             detailInfoPanel.Child = stackPanelDetailInfo;
@@ -300,14 +308,14 @@ namespace MiHoYoTools.Modules.Zenless.Views.GachaViews
             // �������ǵ������Ƭ
             var borderFiveStar = CreateDetailBorder();
             var stackPanelFiveStar = new StackPanel();
-            stackPanelFiveStar.Children.Add(new TextBlock { Text = $"������һ��S���Ѿ�����{countSinceLast5Star}��", FontWeight = FontWeights.Bold });
+            stackPanelFiveStar.Children.Add(new TextBlock { Text = $"距上次S级已抽{countSinceLast5Star}抽", FontWeight = FontWeights.Bold });
 
             var selectedCardPool = cardPoolInfo.CardPools.FirstOrDefault(cp => cp.CardPoolId == selectedCardPoolId);
             if (selectedCardPool != null && selectedCardPool.FiveStarPity.HasValue)
             {
                 var progressBar5 = CreateProgressBar(countSinceLast5Star, selectedCardPool.FiveStarPity.Value);
                 stackPanelFiveStar.Children.Add(progressBar5);
-                stackPanelFiveStar.Children.Add(new TextBlock { Text = $"����{selectedCardPool.FiveStarPity.Value}��", FontSize = 12, Foreground = new SolidColorBrush(Colors.Gray) });
+                stackPanelFiveStar.Children.Add(new TextBlock { Text = $"保底{selectedCardPool.FiveStarPity.Value}抽", FontSize = 12, Foreground = new SolidColorBrush(Colors.Gray) });
                 SharedDatas.Gacha.FiveStarPity = selectedCardPool.FiveStarPity.Value;
             }
             borderFiveStar.Child = stackPanelFiveStar;
@@ -316,13 +324,13 @@ namespace MiHoYoTools.Modules.Zenless.Views.GachaViews
             // �������ǵ������Ƭ
             var borderFourStar = CreateDetailBorder();
             var stackPanelFourStar = new StackPanel();
-            stackPanelFourStar.Children.Add(new TextBlock { Text = $"������һ��A���Ѿ�����{countSinceLast4Star}��", FontWeight = FontWeights.Bold });
+            stackPanelFourStar.Children.Add(new TextBlock { Text = $"距上次A级已抽{countSinceLast4Star}抽", FontWeight = FontWeights.Bold });
 
             if (selectedCardPool != null && selectedCardPool.FourStarPity.HasValue)
             {
                 var progressBar4 = CreateProgressBar(countSinceLast4Star, selectedCardPool.FourStarPity.Value);
                 stackPanelFourStar.Children.Add(progressBar4);
-                stackPanelFourStar.Children.Add(new TextBlock { Text = $"����{selectedCardPool.FourStarPity.Value}��", FontSize = 12, Foreground = new SolidColorBrush(Colors.Gray) });
+                stackPanelFourStar.Children.Add(new TextBlock { Text = $"保底{selectedCardPool.FourStarPity.Value}抽", FontSize = 12, Foreground = new SolidColorBrush(Colors.Gray) });
             }
             borderFourStar.Child = stackPanelFourStar;
             contentPanel.Children.Add(borderFourStar);

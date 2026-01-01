@@ -106,10 +106,14 @@ namespace MiHoYoTools.Modules.Zenless.Views.ToolViews
             // 获取卡池信息
             cardPoolInfo = await GetCardPoolInfo();
 
-            if (cardPoolInfo == null || cardPoolInfo.CardPools == null)
+            if (cardPoolInfo == null)
             {
-                Console.WriteLine("无法获取卡池信息或卡池列表为空");
-                return;
+                cardPoolInfo = new GachaModel.CardPoolInfo { CardPools = new List<GachaModel.CardPool>() };
+            }
+
+            if (cardPoolInfo.CardPools == null)
+            {
+                cardPoolInfo.CardPools = new List<GachaModel.CardPool>();
             }
             await LoadUIDs();
         }
@@ -128,7 +132,7 @@ namespace MiHoYoTools.Modules.Zenless.Views.ToolViews
             {
                 NotificationManager.RaiseNotification("获取卡池信息时发生错误", "", InfoBarSeverity.Error, false, 5);
                 Logging.Write($"获取卡池信息时发生错误: {ex.Message}", 2);
-                throw;
+                return null;
             }
         }
 
@@ -161,19 +165,12 @@ namespace MiHoYoTools.Modules.Zenless.Views.ToolViews
             GachaRecordsUID.ItemsSource = null;
             GachaRecordsUID.Items.Clear();
 
-            string linkDirectory = AppPaths.ResolveGameFolder(GameType.ZenlessZoneZero, "GachaLinks");
-            string recordsDirectory = AppPaths.ResolveGameFolder(GameType.ZenlessZoneZero, "GachaRecords");
-
-            if (Directory.Exists(recordsDirectory))
+            var uidList = GachaRepository.GetUids(GameType.ZenlessZoneZero);
+            if (uidList.Count > 0)
             {
-                var uidFiles = Directory.GetFiles(recordsDirectory, "*.json");
-                var uidList = uidFiles.Select(Path.GetFileNameWithoutExtension).ToList();
                 GachaRecordsUID.ItemsSource = uidList;
-                if (uidList.Count > 0)
-                {
-                    GachaRecordsUID.SelectedIndex = 0;
-                    selectedUid = GachaRecordsUID.SelectedValue.ToString();
-                }
+                GachaRecordsUID.SelectedIndex = 0;
+                selectedUid = GachaRecordsUID.SelectedValue.ToString();
             }
             GachaRecordsUID.SelectionChanged += GachaRecordsUID_SelectionChanged; // 重新启用事件处理程序
         }
@@ -214,20 +211,8 @@ namespace MiHoYoTools.Modules.Zenless.Views.ToolViews
             GachaRecordsUID.ItemsSource = null;
             try
             {
-                string recordsDirectory = AppPaths.ResolveGameFolder(GameType.ZenlessZoneZero, "GachaRecords");
-
-                HashSet<string> uidSet = new HashSet<string>();
-
-                if (Directory.Exists(recordsDirectory))
-                {
-                    var recordFiles = Directory.GetFiles(recordsDirectory, "*.json");
-                    foreach (var file in recordFiles)
-                    {
-                        uidSet.Add(Path.GetFileNameWithoutExtension(file));
-                    }
-                }
-
-                if (uidSet.Count == 0)
+                var uidList = GachaRepository.GetUids(GameType.ZenlessZoneZero);
+                if (uidList.Count == 0)
                 {
                     gachaView.Visibility = Visibility.Collapsed;
                     loadGachaProgress.Visibility = Visibility.Collapsed;
@@ -237,8 +222,8 @@ namespace MiHoYoTools.Modules.Zenless.Views.ToolViews
                     return;
                 }
 
-                GachaRecordsUID.ItemsSource = uidSet.ToList();
-                if (uidSet.Count > 0)
+                GachaRecordsUID.ItemsSource = uidList;
+                if (uidList.Count > 0)
                 {
                     GachaRecordsUID.SelectedIndex = 0;
                     loadGachaProgress.Visibility = Visibility.Collapsed;
@@ -286,52 +271,54 @@ namespace MiHoYoTools.Modules.Zenless.Views.ToolViews
             try
             {
                 Logging.Write("Load GachaRecords...");
-                string recordsDirectory = AppPaths.ResolveGameFolder(GameType.ZenlessZoneZero, "GachaRecords");
-                string filePath = Path.Combine(recordsDirectory, $"{uid}.json");
-
-                if (!File.Exists(filePath))
+                var gachaData = GachaRepository.GetZenlessGachaData(uid);
+                if (gachaData?.list == null || gachaData.list.Count == 0)
                 {
-                    if (isUserInteraction)
-                    {
-                        return;
-                    }
-
-                    // 使用for循环遍历所有选项
-                    bool recordFound = false;
-                    isUserInteraction = false;
-                    GachaRecordsUID.SelectionChanged -= GachaRecordsUID_SelectionChanged;
-                    for (int i = 0; i < GachaRecordsUID.Items.Count; i++)
-                    {
-                        GachaRecordsUID.SelectedIndex = i;
-                        var newUid = GachaRecordsUID.SelectedItem.ToString();
-                        string newFilePath = Path.Combine(recordsDirectory, $"{newUid}.json");
-
-                        if (File.Exists(newFilePath))
-                        {
-                            recordFound = true;
-                            break;
-                        }
-                    }
-
-                    if (!recordFound)
-                    {
-                        GachaRecordsUID.SelectedIndex = 0;
-                        NotificationManager.RaiseNotification("无可用的调频记录", "", InfoBarSeverity.Warning);
-                        gachaNav.Visibility = Visibility.Collapsed;
-                        gachaFrame.Visibility = Visibility.Collapsed;
-                    }
-                    GachaRecordsUID.SelectionChanged += GachaRecordsUID_SelectionChanged;
+                    NotificationManager.RaiseNotification("无可用的调频记录", "", InfoBarSeverity.Warning);
+                    gachaNav.Visibility = Visibility.Collapsed;
+                    gachaFrame.Visibility = Visibility.Collapsed;
                     return;
                 }
 
-                var jsonContent = await File.ReadAllTextAsync(filePath);
-                var gachaData = JsonConvert.DeserializeObject<GachaModel.GachaData>(jsonContent);
-
+                EnsureCardPoolInfo(gachaData);
                 DisplayGachaData(gachaData);
             }
             catch (Exception ex)
             {
                 NotificationManager.RaiseNotification("加载调频记录时发生错误", $"{ex.Message}", InfoBarSeverity.Error);
+            }
+        }
+
+        private void EnsureCardPoolInfo(GachaModel.GachaData gachaData)
+        {
+            if (gachaData?.list == null)
+            {
+                return;
+            }
+
+            if (cardPoolInfo == null)
+            {
+                cardPoolInfo = new GachaModel.CardPoolInfo();
+            }
+
+            if (cardPoolInfo.CardPools == null)
+            {
+                cardPoolInfo.CardPools = new List<GachaModel.CardPool>();
+            }
+
+            if (cardPoolInfo.CardPools.Count > 0)
+            {
+                return;
+            }
+
+            foreach (var pool in gachaData.list)
+            {
+                cardPoolInfo.CardPools.Add(new GachaModel.CardPool
+                {
+                    CardPoolId = pool.cardPoolId,
+                    CardPoolType = pool.cardPoolType,
+                    isPityEnable = false
+                });
             }
         }
 
